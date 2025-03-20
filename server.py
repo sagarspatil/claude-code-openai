@@ -1228,19 +1228,32 @@ async def create_message(
             "traceback": error_traceback
         }
         
-        # Check for LiteLLM-specific attributes
-        for attr in ['message', 'status_code', 'response', 'llm_provider', 'model']:
+        # Check for LiteLLM-specific attributes, converting Response objects to strings
+        for attr in ['message', 'status_code', 'llm_provider', 'model']:
             if hasattr(e, attr):
-                error_details[attr] = getattr(e, attr)
+                value = getattr(e, attr)
+                # Convert Response objects to string representation
+                if hasattr(value, '__class__') and value.__class__.__name__ == 'Response':
+                    error_details[attr] = str(value)
+                else:
+                    error_details[attr] = value
         
         # Check for additional exception details in dictionaries
         if hasattr(e, '__dict__'):
             for key, value in e.__dict__.items():
                 if key not in error_details and key not in ['args', '__traceback__']:
-                    error_details[key] = str(value)
+                    # Convert Response objects to string representation
+                    if hasattr(value, '__class__') and value.__class__.__name__ == 'Response':
+                        error_details[key] = str(value)
+                    else:
+                        error_details[key] = str(value)
         
         # Log all error details
-        logger.error(f"Error processing request: {json.dumps(error_details, indent=2)}")
+        try:
+            logger.error(f"Error processing request: {json.dumps(error_details, indent=2)}")
+        except TypeError as json_error:
+            # Fallback if JSON serialization fails
+            logger.error(f"Error processing request (raw): {error_details}")
         
         # Format error for response
         error_message = f"Error: {str(e)}"
