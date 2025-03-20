@@ -124,6 +124,7 @@ class Tool(BaseModel):
 
 class ThinkingConfig(BaseModel):
     enabled: bool
+    budget_tokens: Optional[int] = None
 
 class MessagesRequest(BaseModel):
     model: str
@@ -481,6 +482,21 @@ def convert_anthropic_to_litellm(anthropic_request: MessagesRequest) -> Dict[str
     else:
         litellm_request["temperature"] = anthropic_request.temperature
     
+    # Add thinking parameter for o3-mini models only
+    if "o3-mini" in anthropic_request.model:
+        # Add reasoning_effort parameter
+        litellm_request["reasoning_effort"] = "high"
+        
+        # Add thinking parameter if provided
+        if anthropic_request.thinking:
+            if anthropic_request.thinking.enabled:
+                thinking_config = {"type": "enabled"}
+                if anthropic_request.thinking.budget_tokens is not None:
+                    thinking_config["budget_tokens"] = anthropic_request.thinking.budget_tokens
+                litellm_request["thinking"] = thinking_config
+            else:
+                litellm_request["thinking"] = {"type": "disabled"}
+    
     # Add optional parameters if present
     if anthropic_request.stop_sequences:
         litellm_request["stop"] = anthropic_request.stop_sequences
@@ -650,15 +666,15 @@ def convert_litellm_to_anthropic(litellm_response: Union[Dict[str, Any], Any],
             for idx, tool_call in enumerate(tool_calls):
                 # Extract function data based on whether it's a dict or object
                 if isinstance(tool_call, dict):
-                    function = tool_call.get("function", {})
-                    tool_id = tool_call.get("id", f"tool_{uuid.uuid4()}")
-                    name = function.get("name", "")
-                    arguments = function.get("arguments", "{}")
+                    function = tool_call.get('function', {})
+                    tool_id = tool_call.get('id', f"tool_{uuid.uuid4()}")
+                    name = function.get('name', "")
+                    arguments = function.get('arguments', "{}")
                 else:
-                    function = getattr(tool_call, "function", None)
-                    tool_id = getattr(tool_call, "id", f"tool_{uuid.uuid4()}")
-                    name = getattr(function, "name", "") if function else ""
-                    arguments = getattr(function, "arguments", "{}") if function else "{}"
+                    function = getattr(tool_call, 'function', None)
+                    tool_id = getattr(tool_call, 'id', f"tool_{uuid.uuid4()}")
+                    name = getattr(function, 'name', '') if function else ''
+                    arguments = getattr(function, 'arguments', "{}") if function else "{}"
                 
                 # Convert string arguments to dict if needed
                 if isinstance(arguments, str):
