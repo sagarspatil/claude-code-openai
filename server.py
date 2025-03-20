@@ -331,7 +331,7 @@ def parse_tool_result_content(content):
 
 def convert_anthropic_to_litellm(anthropic_request: MessagesRequest) -> Dict[str, Any]:
     """Convert Anthropic API request format to LiteLLM format (which follows OpenAI)."""
-    # LiteLLM already handles Anthropic models when using the format model="anthropic/claude-3-opus-20240229"
+    # LiteLLM already handles Anthropic models when using the format model="anthropic/claude-x"
     # So we just need to convert our Pydantic model to a dict in the expected format
     
     messages = []
@@ -472,9 +472,14 @@ def convert_anthropic_to_litellm(anthropic_request: MessagesRequest) -> Dict[str
         "model": anthropic_request.model,  # t understands "anthropic/claude-x" format
         "messages": messages,
         "max_tokens": max_tokens,
-        "temperature": anthropic_request.temperature,
         "stream": anthropic_request.stream,
     }
+
+    # Handle temperature for O-series models
+    if "o3-" in anthropic_request.model.lower():
+        litellm_request["temperature"] = 1.0  # O-series models only support temperature=1.0
+    else:
+        litellm_request["temperature"] = anthropic_request.temperature
     
     # Add optional parameters if present
     if anthropic_request.stop_sequences:
@@ -1195,9 +1200,9 @@ async def create_message(
             num_tools = len(request.tools) if request.tools else 0
             
             log_request_beautifully(
-                "POST", 
-                raw_request.url.path, 
-                display_model, 
+                "POST",
+                raw_request.url.path,
+                display_model,
                 litellm_request.get('model'),
                 len(litellm_request['messages']),
                 num_tools,
